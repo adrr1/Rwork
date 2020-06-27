@@ -4,27 +4,177 @@ author: "Alex Rigney"
 date: "6/26/2020"
 output: word_document
 ---
-
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+Importing the data.
+```{r, message=FALSE}
+library(rio)
+inequality_data <- import("inequality.xlsx")
 ```
 
-## R Markdown
-
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
-
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
-
-```{r cars}
-summary(cars)
+Getting to know the data.
+```{r}
+str(inequality_data)
+head(inequality_data)
+tail(inequality_data)
+mean(inequality_data$year)
 ```
 
-## Including Plots
+The data appears to be cross-sectional, as each observation is only sampled once.
 
-You can also embed plots, for example:
+Looking at Sweden's Gini score
+```{r}
+se_gini <- subset(inequality_data, iso2c == "SE", select = inequality_gini)
+print(se_gini)
 
-```{r pressure, echo=FALSE}
-plot(pressure)
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+Looking at Denmark's score
+```{r}
+dk_gini <- subset(inequality_data, iso2c == "DK", select = inequality_gini)
+print(dk_gini)
+```
+
+Looking at Brazil's Gini score
+```{r}
+br_gini <- subset(inequality_data, iso2c == "BR", select = inequality_gini)
+print(br_gini)
+```
+
+It is better to have lower Gini Coefficient scores. That means your country's income is distributed more equally. 
+
+Looking at the head of the data.
+```{r}
+head(inequality_data)
+```
+
+Creating a function to remove accents from the country variable. 
+```{r}
+# define the function
+accents.remove <- function(s) {
+# 1 character substitutions
+old <- "ú"
+new <- "u"
+s1 <- chartr(old, new, s)
+
+for(i in seq_along(old)) s1 <- gsub(old[i], new[i], s1, fixed = TRUE)
+s1
+}
+# finish the accent FIX
+inequality_data$country = accents.remove(inequality_data$country)
+
+head(inequality_data)
+
+```
+
+Sorting the data by Gini score, from lowest to highest.
+```{r}
+inequality_data <- inequality_data[order(inequality_data$inequality_gini),]
+
+head(inequality_data)
+```
+
+Checking the mean of the Gini Score.
+```{r}
+gini_mean <- mean(inequality_data$inequality_gini, na.rm = TRUE)
+gini_mean
+```
+
+Trying and failing to create a high and low inequality dummy variable.
+```{r}
+inequality_data$low_inequality=NA
+inequality_data$high_inequality=NA
+
+ifelse(test = inequality_data$inequality_gini > 36.81375, yes = inequality_data$high_inequality <- 1, no = inequality_data$low_inequality <- 1)
+```
+I've spent 30 minutes on this, I give up
+
+
+Printing three names using a for loop.
+```{r}
+names <- c("The World Bank", "the African Development Bank", "the Bill and Melinda Gates Foundation")
+for(n in names)
+  print(n)
+```
+
+
+
+
+I chose the literacy rate for adults over the age of 15. I would assume that nations with a low literacy rate would tend to have higher inequality.
+
+Importing the data and changing the name to something sensable.
+```{r}
+library(WDI)
+lit_data = WDI(country = "all",
+indicator = c("SE.ADT.LITR.ZS"), # indicator from web
+start = 2015, end = 2015, extra = FALSE, cache = NULL)
+
+library(data.table)
+setnames(lit_data, "SE.ADT.LITR.ZS", "lit_rate")
+```
+
+
+
+Merging the two data frames into one, left side join.
+```{r}
+library(tidyverse)
+
+merged_df <- left_join(x=inequality_data,
+                       y=lit_data,
+                       by = c("iso2c", "country", "year"))
+
+str(merged_df)
+names(merged_df)
+head(merged_df)
+```
+
+
+Dropping all the countries with NAs in either the gini scores or the literacy rate.
+```{r}
+merged_df <-
+merged_df %>%
+  filter(!(inequality_gini=="NA")) %>% 
+  filter(!(lit_rate=="NA"))
+
+```
+
+
+
+Creating a data frame of only those countries with gini scores above 30.
+```{r}
+data_greater_30 <-
+merged_df %>%
+  filter(inequality_gini > 30)
+data_greater_30
+```
+
+
+summing up the number of countries that have "ai" in their name.
+```{r}
+sum(grep("ai", data_greater_30))
+```
+
+Summing up the gini scores, or at least trying to.
+```{r}
+sapply(data_greater_30$inequality_gini, FUN = sum)
+```
+
+
+Labeling and exporting the data frame so future researchers will be able to continue my great work.
+```{r}
+library(labelled)
+var_label(data_greater_30) <- list(
+      `iso2c` = "boop beep boop",           
+      `country` = "different thing",
+      `inequality_gini` = "another thing",
+      `year` = "How many are there?",
+      `low_inequality` = "it can't go on any longer",
+      `high_inequality` = "but it is!",
+      `lit_rate` = "thanks for grading the test!")
+
+# save the dataset in Stata format with the labels
+export(data_greater_30, file = "final_data.dta")
+```
+
+
+https://github.com/adrr1/rwork
+
+Thank you!
